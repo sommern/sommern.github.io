@@ -1,0 +1,628 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Album tracker</title>
+<style>
+  :root {
+    --bg: #f2f4f6; --surface: #ffffff; --ink: #1b2432; --muted: #647084;
+    --line: #dde2e8; --accent: #2447b8; --accent-ink: #ffffff; --hover: #eef1f6;
+    --s-interested: #b7791f; --s-sampled: #2b6cb0; --s-listened: #6b46c1; --s-familiar: #2f855a;
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #12161d; --surface: #1a2029; --ink: #e8ecf2; --muted: #93a0b4;
+      --line: #2b3441; --accent: #7c9cff; --accent-ink: #0f1420; --hover: #222a36;
+      --s-interested: #ecb04d; --s-sampled: #63b3ed; --s-listened: #b794f4; --s-familiar: #68d391;
+      color-scheme: dark;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink);
+    font: 15px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  main { max-width: 1040px; margin: 0 auto; padding: 16px; }
+  h1 { font: 600 26px/1.1 Georgia, "Times New Roman", serif; margin: 8px 0 14px; letter-spacing: -.01em; }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  /* Filters */
+  details.filters { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; margin-bottom: 12px; }
+  details.filters > summary { cursor: pointer; padding: 10px 14px; font-weight: 600; list-style: none; display: flex; justify-content: space-between; }
+  details.filters > summary::after { content: "▾"; color: var(--muted); }
+  details.filters[open] > summary::after { content: "▴"; }
+  .filter-body { padding: 4px 14px 14px; display: grid; gap: 14px 28px; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); }
+  .filter-body .wide { grid-column: 1 / -1; }
+  fieldset { border: 0; padding: 0; margin: 0; min-width: 0; }
+  legend { font-weight: 600; font-size: 13px; color: var(--muted); padding: 0; margin-bottom: 6px; }
+  .btns { display: flex; flex-wrap: wrap; gap: 6px; }
+  .btn { font: inherit; font-size: 13px; padding: 5px 10px; border: 1px solid var(--line); background: var(--surface);
+    color: var(--ink); border-radius: 6px; cursor: pointer; }
+  .btn:hover { background: var(--hover); }
+  .btn[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+  .dates { display: flex; flex-wrap: wrap; gap: 8px 14px; margin-top: 8px; }
+  .dates label { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted); }
+  .dates input { font: inherit; font-size: 13px; color: var(--ink); background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 3px 6px; }
+  .checks { display: flex; flex-wrap: wrap; gap: 4px 14px; }
+  .checks label, .seg label { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; font-size: 14px; }
+  .seg { display: flex; gap: 14px; flex-wrap: wrap; }
+  .dot { width: 9px; height: 9px; border-radius: 50%; display: inline-block; background: currentColor; flex: none; }
+
+  /* Toolbar */
+  .toolbar { display: flex; justify-content: space-between; align-items: center; margin: 0 2px 8px; color: var(--muted); font-size: 13px; }
+  .sort-select { display: none; font: inherit; font-size: 13px; padding: 4px 6px; border-radius: 6px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); }
+
+  /* Table */
+  .table-wrap { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+  table { width: 100%; border-collapse: collapse; }
+  th, td { text-align: left; padding: 9px 14px; border-bottom: 1px solid var(--line); vertical-align: baseline; }
+  tbody tr:last-child td { border-bottom: 0; }
+  th { font-size: 13px; color: var(--muted); font-weight: 600; white-space: nowrap; background: var(--surface); }
+  th button { all: unset; cursor: pointer; display: inline-flex; gap: 4px; align-items: center; }
+  th button:hover { color: var(--ink); }
+  th button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  th[aria-sort="ascending"] button::after { content: "▲"; font-size: 10px; }
+  th[aria-sort="descending"] button::after { content: "▼"; font-size: 10px; }
+  th[aria-sort="ascending"], th[aria-sort="descending"] { color: var(--ink); }
+  td.artist, td.title { font: 600 15px/1.3 Georgia, "Times New Roman", serif; }
+  td.date { color: var(--muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  td.rating { white-space: nowrap; }
+  td.act { width: 1%; padding-left: 0; text-align: right; }
+  .ssel { font: inherit; font-size: 13px; color: var(--ink); background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 3px 4px; cursor: pointer; }
+  .more { font: inherit; font-size: 18px; line-height: 1; width: 32px; height: 32px; border: 0; border-radius: 6px; background: none; color: var(--muted); cursor: pointer; }
+  .more:hover, .more[aria-expanded="true"] { background: var(--hover); color: var(--ink); }
+
+  /* Row menu */
+  .menu { position: fixed; z-index: 20; min-width: 240px; max-width: calc(100vw - 16px); max-height: calc(100vh - 16px); overflow: auto;
+    background: var(--surface); border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 8px 24px rgba(0,0,0,.18); padding: 6px 0; }
+  .menu-h { padding: 6px 14px 2px; font-size: 12px; font-weight: 600; color: var(--muted); }
+  .menu-h.sep { border-top: 1px solid var(--line); margin-top: 6px; padding-top: 10px; }
+  .menu a { display: block; padding: 7px 14px; color: var(--ink); text-decoration: none; }
+  .menu a:hover, .menu a:focus-visible { background: var(--hover); }
+  .menu-copy { padding: 4px 14px 8px; display: grid; gap: 4px; }
+  .menu-copy label { display: flex; gap: 8px; align-items: center; cursor: pointer; }
+  .menu-copy output { display: block; margin: 4px 0; padding: 6px 8px; background: var(--hover); border-radius: 6px; font-size: 13px; color: var(--muted); word-break: break-word; }
+  .menu-copy .btn { justify-self: start; }
+  .menu-copy .btn:disabled { opacity: .5; cursor: default; }
+  .toast { position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%); z-index: 30; background: var(--ink); color: var(--bg);
+    padding: 8px 14px; border-radius: 8px; font-size: 14px; }
+  .status { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; }
+  .s-Interested { color: var(--s-interested); } .s-Sampled { color: var(--s-sampled); }
+  .s-Listened { color: var(--s-listened); } .s-Familiar { color: var(--s-familiar); }
+  .status span:last-child { color: var(--ink); }
+  tr.group th { background: var(--hover); color: var(--ink); font-size: 14px; padding: 7px 14px; }
+  tr.group .n { color: var(--muted); font-weight: 400; margin-left: 6px; }
+  .empty { padding: 28px 14px; text-align: center; color: var(--muted); }
+  .empty .btn { margin-top: 10px; }
+
+  /* Mobile: each row becomes a compact card */
+  @media (max-width: 700px) {
+    main { padding: 10px; }
+    .sort-select { display: inline-block; }
+    thead { display: none; }
+    table, tbody { display: block; }
+    tr.group { display: block; }
+    tr.group th { display: block; }
+    tr.row { display: grid; grid-template-columns: 1fr auto; grid-template-areas: "artist menu" "title date" "status rating";
+      column-gap: 12px; row-gap: 4px; align-items: center; padding: 8px 12px; border-bottom: 1px solid var(--line); }
+    tr.row:last-child { border-bottom: 0; }
+    tr.row td { display: block; padding: 0; border: 0; }
+    td.title { grid-area: title; }
+    td.act { grid-area: menu; width: auto; justify-self: end; margin: -4px -6px -4px 0; }
+    td.artist { grid-area: artist; }
+    td.date { grid-area: date; font-size: 13px; justify-self: end; }
+    td.st { grid-area: status; }
+    td.rating { grid-area: rating; justify-self: end; }
+  }
+</style>
+</head>
+<body>
+<main>
+  <h1>Albums</h1>
+
+  <details class="filters" id="filters" open>
+    <summary>Filters</summary>
+    <div class="filter-body">
+      <fieldset class="wide">
+        <legend>Release date</legend>
+        <div class="btns" id="dateBtns"></div>
+        <div class="dates">
+          <label>From <input type="date" id="dateFrom"></label>
+          <label>To <input type="date" id="dateTo"></label>
+        </div>
+      </fieldset>
+      <fieldset>
+        <legend>Status</legend>
+        <div class="checks" id="statusChecks"></div>
+      </fieldset>
+      <fieldset>
+        <legend>Rating</legend>
+        <div class="checks" id="ratingChecks"></div>
+      </fieldset>
+      <fieldset>
+        <legend>Group by</legend>
+        <div class="seg" id="groupSeg"></div>
+      </fieldset>
+    </div>
+  </details>
+
+  <div class="toolbar">
+    <span id="count" aria-live="polite"></span>
+    <select class="sort-select" id="sortSelect" aria-label="Sort by"></select>
+  </div>
+
+  <div class="table-wrap">
+    <table>
+      <thead><tr id="headRow"></tr></thead>
+      <tbody id="body"></tbody>
+    </table>
+    <div id="empty" class="empty" hidden>
+      No albums match these filters.<br>
+      <button class="btn" id="resetBtn">Clear filters</button>
+    </div>
+  </div>
+</main>
+
+<div id="menu" class="menu" role="menu" hidden></div>
+<div id="toast" class="toast" role="status" hidden></div>
+
+<script>
+/* ---------------------------------------------------------------
+   DATA SOURCE — swap this function to use a real API.
+   Each album: { id, artist, title, releaseDate: "YYYY-MM-DD",
+                 status: "Interested"|"Sampled"|"Listened"|"Familiar",
+                 rating: "Nope"|"Okay"|"Like"|"Love"|null }
+   --------------------------------------------------------------- */
+async function fetchAlbums() {
+  // Real version:
+  // const res = await fetch("/api/albums");
+  // if (!res.ok) throw new Error("Failed to load albums");
+  // return await res.json();
+  return SAMPLE_ALBUMS;
+}
+
+/* Persist a change to one album. Swap this for a real API call (e.g. PATCH).
+   Throw on failure and the UI will revert the change. */
+async function saveAlbum(id, changes) {
+  // const res = await fetch(`/api/albums/${encodeURIComponent(id)}`, {
+  //   method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(changes) });
+  // if (!res.ok) throw new Error("Failed to save album");
+  // return await res.json();
+  return changes;
+}
+
+// Sample dates are relative to today so the date filters always have something to show.
+function offset(days) {
+  const d = new Date(); d.setDate(d.getDate() + days);
+  return iso(d);
+}
+const SAMPLE_ALBUMS = [
+{ id: 1, artist: "Jack White", title: "Frozen Charlotte", releaseDate: offset(-247), status: "Familiar", rating: "Love" },
+{ id: 2, artist: "Lizzy McAlpine", title: "Angel", releaseDate: offset(-170), status: "Sampled", rating: "Like" },
+{ id: 3, artist: "The Bug Club", title: "Every Single Muscle", releaseDate: offset(-109), status: "Familiar", rating: "Nope" },
+{ id: 4, artist: "beabadoobee", title: "Pylon", releaseDate: offset(-1), status: "Familiar", rating: "Okay" },
+{ id: 5, artist: "Styrofoam Winos", title: "Any River", releaseDate: offset(-92), status: "Interested", rating: "Like" },
+{ id: 6, artist: "Laura Stevenson", title: "Wheel", releaseDate: offset(-257), status: "Listened", rating: "Nope" },
+{ id: 7, artist: "youbet", title: "youbet", releaseDate: offset(-45), status: "Familiar", rating: "Nope" },
+{ id: 8, artist: "Ryan Davis & the Roadhouse Band", title: "New Threats From the Soul", releaseDate: offset(-93), status: "Listened", rating: "Love" },
+{ id: 9, artist: "Being Dead", title: "EELS", releaseDate: offset(-122), status: "Interested", rating: "Nope" },
+{ id: 10, artist: "isobel", title: "scarlet", releaseDate: offset(-162), status: "Interested", rating: "Okay" },
+{ id: 11, artist: "Luke Temple and The Cascading Moms", title: "Hungry Animal", releaseDate: offset(-75), status: "Familiar", rating: "Okay" },
+{ id: 12, artist: "Prince Daddy & The Hyena", title: "Hotwire Trip Switch", releaseDate: offset(-54), status: "Interested", rating: "Like" },
+{ id: 13, artist: "Manchester Orchestra", title: "Union Chapel (London, England)", releaseDate: offset(-32), status: "Sampled", rating: null },
+{ id: 14, artist: "Friko", title: "Something Worth Waiting For", releaseDate: offset(-221), status: "Sampled", rating: "Okay" },
+{ id: 15, artist: "After", title: "Fell Asleep in the Sun", releaseDate: offset(-283), status: "Interested", rating: "Okay" },
+{ id: 16, artist: "Marnie Stern", title: "The Comeback Kid", releaseDate: offset(-164), status: "Listened", rating: "Like" },
+{ id: 17, artist: "Tinashe", title: "Popstar", releaseDate: offset(-44), status: "Listened", rating: null },
+{ id: 18, artist: "Cusp", title: "What I Want Doesn’t Want Me Back", releaseDate: offset(-3), status: "Interested", rating: "Like" },
+{ id: 19, artist: "hey, nothing", title: "Hound", releaseDate: offset(-128), status: "Familiar", rating: "Love" },
+{ id: 20, artist: "M83", title: "I Wrote You a Letter", releaseDate: offset(-262), status: "Listened", rating: "Like" },
+{ id: 21, artist: "TOMORA", title: "COME CLOSER", releaseDate: offset(-172), status: "Interested", rating: "Okay" },
+{ id: 22, artist: "Israel Nash", title: "Sweetheart of the Rodeo", releaseDate: offset(-169), status: "Sampled", rating: "Okay" },
+{ id: 23, artist: "Remi Wolf", title: "Mud", releaseDate: offset(-251), status: "Familiar", rating: null },
+{ id: 24, artist: "Troye Sivan", title: "She’s the Best", releaseDate: offset(-297), status: "Familiar", rating: "Love" },
+{ id: 25, artist: "Death Cab for Cutie", title: "I Built You a Tower", releaseDate: offset(-184), status: "Sampled", rating: "Nope" },
+{ id: 26, artist: "Morgan Nagler", title: "I’ve Got Nothing to Lose, and I’m Losing It", releaseDate: offset(-35), status: "Sampled", rating: "Nope" },
+{ id: 27, artist: "of Montreal", title: "aethermead", releaseDate: offset(-194), status: "Familiar", rating: "Nope" },
+{ id: 28, artist: "Asher White", title: "Love Aggregates", releaseDate: offset(-152), status: "Interested", rating: null },
+{ id: 29, artist: "Sad13", title: "1331", releaseDate: offset(-277), status: "Sampled", rating: "Okay" },
+{ id: 30, artist: "Ecca Vandal", title: "LOOKING FOR PEOPLE TO UNFOLLOW", releaseDate: offset(-129), status: "Sampled", rating: "Nope" },
+{ id: 31, artist: "Rachel Chinouriri", title: "I think I spoke too soon", releaseDate: offset(-80), status: "Sampled", rating: "Love" },
+{ id: 32, artist: "daine", title: "In Endless Awe & Agony", releaseDate: offset(15), status: "Familiar", rating: "Like" },
+{ id: 33, artist: "Dent May", title: "The Big One", releaseDate: offset(-170), status: "Familiar", rating: "Love" },
+{ id: 34, artist: "slayr", title: "Fabula Nova", releaseDate: offset(-206), status: "Sampled", rating: null },
+{ id: 35, artist: "Emperor X", title: "Unified Field", releaseDate: offset(-8), status: "Sampled", rating: "Love" },
+{ id: 36, artist: "FONTAINES D.C.", title: "Dopamine Chamber", releaseDate: offset(-280), status: "Familiar", rating: "Okay" },
+{ id: 37, artist: "Anderson .Paak & Cordae", title: "Heavy Is the Crown", releaseDate: offset(-9), status: "Familiar", rating: "Love" },
+{ id: 38, artist: "Getdown Services", title: "Massive Champion", releaseDate: offset(-266), status: "Sampled", rating: "Love" },
+{ id: 39, artist: "Kiwi jr.", title: "Blowin' Up", releaseDate: offset(-198), status: "Listened", rating: "Love" },
+{ id: 40, artist: "Prairie Princess", title: "Jewish American Prairie Princess", releaseDate: offset(-49), status: "Familiar", rating: "Okay" },
+{ id: 41, artist: "Miley Cyrus", title: "Bass Persuades", releaseDate: offset(-4), status: "Familiar", rating: "Love" },
+{ id: 42, artist: "Modest Mouse", title: "An Eraser and a Maze", releaseDate: offset(-80), status: "Familiar", rating: "Nope" },
+{ id: 43, artist: "Touch Girl Apple Blossom", title: "Graceful", releaseDate: offset(-78), status: "Familiar", rating: "Love" },
+{ id: 44, artist: "Coleman Jennings", title: "Lead You Home", releaseDate: offset(-254), status: "Sampled", rating: "Okay" },
+{ id: 45, artist: "Tove Lo", title: "ESTRUS", releaseDate: offset(-61), status: "Sampled", rating: null },
+{ id: 46, artist: "Brown Horse", title: "Total Dive", releaseDate: offset(-216), status: "Interested", rating: null },
+{ id: 47, artist: "Vera Ellen", title: "HEAVEN KNOWS WHAT TIME", releaseDate: offset(10), status: "Interested", rating: "Love" },
+{ id: 48, artist: "The Avalanches", title: "No Bad Memories", releaseDate: offset(-292), status: "Sampled", rating: "Love" },
+{ id: 49, artist: "Queens of the Stone Age", title: "Perfecth", releaseDate: offset(-127), status: "Listened", rating: null },
+{ id: 50, artist: "AJJ", title: "Dirty Old Power", releaseDate: offset(-184), status: "Listened", rating: "Okay" },
+{ id: 51, artist: "Mallory Hawk", title: "Chinook", releaseDate: offset(-202), status: "Interested", rating: "Love" },
+{ id: 52, artist: "ScHoolboy Q", title: "Thank Que", releaseDate: offset(19), status: "Listened", rating: "Okay" },
+{ id: 53, artist: "Dua Saleh", title: "Of Earth & Wires", releaseDate: offset(-72), status: "Familiar", rating: "Like" },
+{ id: 54, artist: "Swans", title: "Newly Sentient Being", releaseDate: offset(-246), status: "Listened", rating: "Okay" },
+{ id: 55, artist: "Beck", title: "Ride Lonesome", releaseDate: offset(-201), status: "Interested", rating: "Okay" },
+{ id: 56, artist: "They Might Be Giants", title: "The World Is to Dig", releaseDate: offset(8), status: "Interested", rating: "Love" },
+{ id: 57, artist: "drug bug", title: "Hell for a Basement", releaseDate: offset(-204), status: "Familiar", rating: "Nope" },
+{ id: 58, artist: "Angels In America", title: "Asphalt Green", releaseDate: offset(-3), status: "Listened", rating: "Like" },
+{ id: 59, artist: "Lucy Bedroque", title: "c", releaseDate: offset(-102), status: "Interested", rating: "Love" },
+{ id: 60, artist: "Greg Freeman", title: "All Set the Bone", releaseDate: offset(-131), status: "Familiar", rating: "Nope" },
+{ id: 61, artist: "Robyn", title: "Sexistential", releaseDate: offset(14), status: "Familiar", rating: "Okay" },
+{ id: 62, artist: "Sylvan Esso", title: "Ow ∞", releaseDate: offset(-37), status: "Interested", rating: null },
+{ id: 63, artist: "AJJ", title: "Disposable Everything", releaseDate: offset(0), status: "Listened", rating: "Okay" },
+{ id: 64, artist: "ROSALÍA", title: "MOTOMAMI", releaseDate: offset(-110), status: "Sampled", rating: "Okay" },
+{ id: 65, artist: "Cameron Winter", title: "Live at Carnegie Hall", releaseDate: offset(-191), status: "Sampled", rating: "Okay" },
+{ id: 66, artist: "feeble little horse", title: "bitknot", releaseDate: offset(-244), status: "Listened", rating: "Okay" },
+{ id: 67, artist: "Syd Matters", title: "A Gospel of Some Sort", releaseDate: offset(-262), status: "Familiar", rating: "Okay" },
+{ id: 68, artist: "duendita", title: "existential thottie", releaseDate: offset(-216), status: "Familiar", rating: "Love" }
+];
+
+/* ---------------------------------------------------------------- */
+const STATUSES = ["Interested", "Sampled", "Listened", "Familiar"];
+const RATINGS  = ["Nope", "Okay", "Like", "Love"];
+const EMOJI    = { "Nope": "👎", "Okay": "😐", "Like": "👍", "Love": "❤️" };
+const NO_RATING = "Unrated";
+const RANGES = [
+  { id: "l7",  label: "Last 7 days",  from: -7,  to: 0 },
+  { id: "l30", label: "Last 30 days", from: -30, to: 0 },
+  { id: "l90", label: "Last 90 days", from: -90, to: 0 },
+  { id: "l365", label: "Last year",   from: -365, to: 0 },
+  { id: "n7",  label: "Next 7 days",  from: 0,   to: 7 },
+  { id: "n30", label: "Next 30 days", from: 0,   to: 30 },
+];
+const COLUMNS = [
+  { key: "artist", label: "Artist" },
+  { key: "title",  label: "Title" },
+  { key: "date",   label: "Released" },
+  { key: "status", label: "Status" },
+  { key: "rating", label: "Rating" },
+];
+const GROUPS = [{ id: "none", label: "Nothing" }, { id: "status", label: "Status" }, { id: "rating", label: "Rating" }];
+
+const state = {
+  albums: [],
+  from: "", to: "",   // inclusive ISO dates; empty = unbounded
+  statuses: new Set(STATUSES),
+  ratings: new Set([...RATINGS, NO_RATING]),
+  group: "none",
+  sort: { key: "date", dir: -1 },
+};
+
+function iso(d) {
+  return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+}
+const $ = id => document.getElementById(id);
+const esc = s => String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const fmtDate = s => new Date(s + "T00:00:00").toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
+const ratingOf = a => a.rating || NO_RATING;
+
+/* ---------- Controls ---------- */
+function buildControls() {
+  $("dateBtns").innerHTML = RANGES.map(r =>
+    `<button type="button" class="btn" data-range="${r.id}" aria-pressed="false">${r.label}</button>`).join("") +
+    `<button type="button" class="btn" data-range="">Any date</button>`;
+  $("dateBtns").addEventListener("click", e => {
+    const b = e.target.closest("button"); if (!b) return;
+    const r = RANGES.find(x => x.id === b.dataset.range);
+    if (!r || presetActive(r)) { state.from = state.to = ""; }   // "Any date", or the active preset clicked again
+    else { state.from = offset(r.from); state.to = offset(r.to); }
+    render();
+  });
+  $("dateFrom").addEventListener("change", e => { state.from = e.target.value; render(); });
+  $("dateTo").addEventListener("change", e => { state.to = e.target.value; render(); });
+
+  $("statusChecks").innerHTML = STATUSES.map(s =>
+    `<label><input type="checkbox" data-kind="statuses" value="${s}" checked><span class="status s-${s}"><span class="dot"></span><span>${s}</span></span></label>`).join("");
+  $("ratingChecks").innerHTML = RATINGS.map(r =>
+    `<label><input type="checkbox" data-kind="ratings" value="${r}" checked><span><span aria-hidden="true">${EMOJI[r]}</span> ${r}</span></label>`).join("") +
+    `<label><input type="checkbox" data-kind="ratings" value="${NO_RATING}" checked><span>No rating</span></label>`;
+  document.querySelector(".filter-body").addEventListener("change", e => {
+    const el = e.target;
+    if (el.dataset.kind) {
+      el.checked ? state[el.dataset.kind].add(el.value) : state[el.dataset.kind].delete(el.value);
+      render();
+    } else if (el.name === "group") {
+      state.group = el.value; render();
+    }
+  });
+
+  $("groupSeg").innerHTML = GROUPS.map(g =>
+    `<label><input type="radio" name="group" value="${g.id}" ${g.id === state.group ? "checked" : ""}> ${g.label}</label>`).join("");
+
+  $("headRow").innerHTML = COLUMNS.map(c =>
+    `<th scope="col" data-key="${c.key}"><button type="button">${c.label}</button></th>`).join("") +
+    `<th scope="col"><span class="sr-only">Actions</span></th>`;
+  $("headRow").addEventListener("click", e => {
+    const th = e.target.closest("th"); if (!th) return;
+    const key = th.dataset.key;
+    if (!key) return;
+    state.sort = { key, dir: state.sort.key === key ? -state.sort.dir : 1 };
+    render();
+  });
+
+  // Mobile sort picker (headers are hidden in card layout)
+  $("sortSelect").innerHTML = COLUMNS.flatMap(c => [
+    `<option value="${c.key}:1">${c.label} ↑</option>`,
+    `<option value="${c.key}:-1">${c.label} ↓</option>`]).join("");
+  $("sortSelect").addEventListener("change", e => {
+    const [key, dir] = e.target.value.split(":");
+    state.sort = { key, dir: +dir }; render();
+  });
+
+  $("resetBtn").addEventListener("click", () => {
+    state.from = state.to = "";
+    state.statuses = new Set(STATUSES);
+    state.ratings = new Set([...RATINGS, NO_RATING]);
+    document.querySelectorAll(".filter-body input[type=checkbox]").forEach(c => c.checked = true);
+    render();
+  });
+
+  // Collapse filters by default on small screens
+  if (window.matchMedia("(max-width: 700px)").matches) $("filters").open = false;
+}
+
+/* ---------- Filtering, sorting, grouping ---------- */
+const presetActive = r => state.from === offset(r.from) && state.to === offset(r.to);
+
+function filtered() {
+  return state.albums.filter(a =>
+    state.statuses.has(a.status) &&
+    state.ratings.has(ratingOf(a)) &&
+    (!state.from || a.releaseDate >= state.from) &&
+    (!state.to || a.releaseDate <= state.to));
+}
+
+function compare(a, b) {
+  const { key, dir } = state.sort;
+  let x, y;
+  switch (key) {
+    case "artist": x = a.artist.toLowerCase(); y = b.artist.toLowerCase(); break;
+    case "title":  x = a.title.toLowerCase();  y = b.title.toLowerCase();  break;
+    case "date":   x = a.releaseDate; y = b.releaseDate; break;
+    case "status": x = STATUSES.indexOf(a.status); y = STATUSES.indexOf(b.status); break;
+    case "rating":
+      // Unrated albums always sort last, whichever direction is chosen
+      if (!a.rating && !b.rating) return 0;
+      if (!a.rating) return 1;
+      if (!b.rating) return -1;
+      x = RATINGS.indexOf(a.rating); y = RATINGS.indexOf(b.rating); break;
+  }
+  const c = x < y ? -1 : x > y ? 1 : 0;
+  return c ? c * dir : a.title.localeCompare(b.title);
+}
+
+function groupsOf(list) {
+  if (state.group === "none") return [{ name: null, items: list }];
+  const order = state.group === "status" ? STATUSES : [...RATINGS].reverse().concat(NO_RATING);
+  const keyOf = state.group === "status" ? a => a.status : ratingOf;
+  return order.map(name => ({ name, items: list.filter(a => keyOf(a) === name) })).filter(g => g.items.length);
+}
+
+/* ---------- Rendering ---------- */
+function rowHtml(a) {
+  const id = esc(a.id), title = esc(a.title);
+  const rateOpts = `<option value=""${a.rating ? "" : " selected"}>No rating</option>` +
+    RATINGS.map(r => `<option value="${r}"${r === a.rating ? " selected" : ""}>${EMOJI[r]} ${r}</option>`).join("");
+  const opts = STATUSES.map(s => `<option${s === a.status ? " selected" : ""}>${s}</option>`).join("");
+  return `<tr class="row">
+    <td class="artist">${esc(a.artist)}</td>
+    <td class="title">${title}</td>
+    <td class="date">${fmtDate(a.releaseDate)}</td>
+    <td class="st"><span class="status s-${a.status}"><span class="dot"></span><select class="ssel" data-id="${id}" data-field="status" aria-label="Status of ${title}">${opts}</select></span></td>
+    <td class="rating"><select class="ssel" data-id="${id}" data-field="rating" aria-label="Rating of ${title}">${rateOpts}</select></td>
+    <td class="act"><button type="button" class="more" data-id="${id}" data-field="menu" aria-haspopup="menu" aria-expanded="false" aria-label="Actions for ${title}">⋯</button></td>
+  </tr>`;
+}
+
+function groupLabel(name) {
+  if (state.group === "rating") return (EMOJI[name] ? EMOJI[name] + " " : "") + (name === NO_RATING ? "No rating" : name);
+  return name;
+}
+
+function render() {
+  closeMenu(false);
+  const ae = document.activeElement;
+  const fk = ae && ae.closest && ae.closest("#body") && ae.dataset.id
+    ? { id: ae.dataset.id, field: ae.dataset.field, value: ae.dataset.value } : null;
+  const list = filtered().sort(compare);
+
+  // Controls reflect state
+  document.querySelectorAll("#dateBtns [data-range]").forEach(b => {
+    const r = RANGES.find(x => x.id === b.dataset.range);
+    if (r) b.setAttribute("aria-pressed", String(presetActive(r)));
+  });
+  $("dateFrom").value = state.from; $("dateTo").value = state.to;
+  $("dateFrom").max = state.to; $("dateTo").min = state.from;
+  document.querySelectorAll("#headRow th").forEach(th => {
+    const on = th.dataset.key === state.sort.key;
+    on ? th.setAttribute("aria-sort", state.sort.dir === 1 ? "ascending" : "descending") : th.removeAttribute("aria-sort");
+  });
+  $("sortSelect").value = state.sort.key + ":" + state.sort.dir;
+
+  $("count").textContent = list.length + (list.length === 1 ? " album" : " albums");
+  $("empty").hidden = list.length > 0;
+  $("headRow").parentElement.hidden = list.length === 0;
+
+  $("body").innerHTML = groupsOf(list).map(g =>
+    (g.name ? `<tr class="group"><th colspan="6" scope="colgroup">${groupLabel(g.name)}<span class="n">${g.items.length}</span></th></tr>` : "") +
+    g.items.map(rowHtml).join("")).join("");
+
+  if (fk) {
+    const el = $("body").querySelector(`[data-id="${CSS.escape(fk.id)}"][data-field="${CSS.escape(fk.field)}"]` +
+      (fk.value ? `[data-value="${CSS.escape(fk.value)}"]` : ""));
+    if (el) el.focus();
+  }
+}
+
+/* ---------- Editing ---------- */
+const findAlbum = id => state.albums.find(a => String(a.id) === String(id));
+
+// Optimistic update: change the stored list now, save in the background, revert if the save fails.
+async function updateAlbum(id, changes) {
+  const album = findAlbum(id); if (!album) return;
+  const previous = {};
+  for (const k in changes) previous[k] = album[k];
+  Object.assign(album, changes);
+  render();
+  try {
+    await saveAlbum(album.id, changes);
+  } catch (err) {
+    console.error(err);
+    Object.assign(album, previous);
+    render();
+    toast("Couldn’t save the change. It was reverted.");
+  }
+}
+
+let toastTimer;
+function toast(msg) {
+  const t = $("toast"); t.textContent = msg; t.hidden = false;
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => { t.hidden = true; }, 2400);
+}
+
+/* ---------- Row menu ---------- */
+const SEARCH_SITES = [
+  { name: "Wikipedia",         url: q => "https://en.wikipedia.org/w/index.php?search=" + q },
+  { name: "AllMusic",          url: q => "https://www.allmusic.com/search/albums/" + q },
+  { name: "RateYourMusic",     url: q => "https://rateyourmusic.com/search?searchtype=l&searchterm=" + q },
+  { name: "Album of the Year", url: q => "https://www.albumoftheyear.org/search/?q=" + q },
+  { name: "DuckDuckGo",        url: q => "https://duckduckgo.com/?q=" + q },
+  { name: "Google",            url: q => "https://www.google.com/search?q=" + q },
+];
+const COPY_FIELDS = [
+  { key: "artist", label: "Artist" }, { key: "title", label: "Title" }, { key: "date", label: "Release date" },
+  { key: "status", label: "Status" }, { key: "rating", label: "Rating" },
+];
+const copyOpts = { artist: true, title: true, date: false, status: false, rating: false };
+let menuFor = null; // { id, anchor }
+
+// e.g. "Mitski - Quiet Hours (2026-10-17, Listened, Love)"
+function copyText(a) {
+  const main = [copyOpts.artist && a.artist, copyOpts.title && a.title].filter(Boolean).join(" - ");
+  const extras = [copyOpts.date && a.releaseDate, copyOpts.status && a.status, copyOpts.rating && (a.rating || "No rating")].filter(Boolean);
+  if (!extras.length) return main;
+  return main ? `${main} (${extras.join(", ")})` : extras.join(", ");
+}
+
+async function writeClipboard(text) {
+  try { await navigator.clipboard.writeText(text); return; } catch (e) { /* fall back below */ }
+  const ta = document.createElement("textarea");
+  ta.value = text; ta.style.position = "fixed"; ta.style.opacity = "0";
+  document.body.appendChild(ta); ta.select();
+  const ok = document.execCommand("copy");
+  ta.remove();
+  if (!ok) throw new Error("Copy failed");
+}
+
+function updatePreview() {
+  const a = menuFor && findAlbum(menuFor.id); if (!a) return;
+  const text = copyText(a);
+  $("copyPreview").textContent = text || "Choose at least one attribute";
+  $("copyBtn").disabled = !text;
+}
+
+function openMenu(btn) {
+  if (menuFor && menuFor.anchor === btn) return closeMenu(true);
+  closeMenu(false);
+  const a = findAlbum(btn.dataset.id); if (!a) return;
+  menuFor = { id: a.id, anchor: btn };
+  const q = encodeURIComponent(a.artist + " " + a.title);
+  const m = $("menu");
+  m.innerHTML = `
+    <div class="menu-h">Search for this album</div>
+    ${SEARCH_SITES.map(s => `<a role="menuitem" href="${s.url(q)}" target="_blank" rel="noopener noreferrer">${s.name}</a>`).join("")}
+    <div class="menu-h sep">Copy to clipboard</div>
+    <div class="menu-copy">
+      ${COPY_FIELDS.map(f => `<label><input type="checkbox" data-copy="${f.key}"${copyOpts[f.key] ? " checked" : ""}> ${f.label}</label>`).join("")}
+      <output id="copyPreview"></output>
+      <button type="button" class="btn" id="copyBtn">Copy</button>
+    </div>`;
+  updatePreview();
+  m.hidden = false;
+  btn.setAttribute("aria-expanded", "true");
+
+  // Position below the button, right-aligned; flip above if there isn't room
+  const r = btn.getBoundingClientRect(), w = m.offsetWidth, h = m.offsetHeight;
+  m.style.left = Math.max(8, Math.min(r.right - w, innerWidth - w - 8)) + "px";
+  let top = r.bottom + 4;
+  if (top + h > innerHeight - 8) top = Math.max(8, r.top - h - 4);
+  m.style.top = top + "px";
+  m.querySelector("a").focus();
+}
+
+function closeMenu(returnFocus) {
+  if (!menuFor) return;
+  const anchor = menuFor.anchor;
+  menuFor = null;
+  $("menu").hidden = true;
+  anchor.setAttribute("aria-expanded", "false");
+  if (returnFocus && document.contains(anchor)) anchor.focus();
+}
+
+function bindRowEvents() {
+  const body = $("body"), menu = $("menu");
+
+  body.addEventListener("click", e => {
+    const b = e.target.closest("button[data-field]"); if (!b) return;
+    if (b.dataset.field === "menu") openMenu(b);
+  });
+  body.addEventListener("change", e => {
+    const sel = e.target.closest("select[data-field]"); if (!sel) return;
+    const a = findAlbum(sel.dataset.id); if (!a) return;
+    const f = sel.dataset.field;
+    updateAlbum(a.id, { [f]: f === "rating" ? (sel.value || null) : sel.value });
+  });
+
+  menu.addEventListener("change", e => {
+    const k = e.target.dataset.copy; if (!k) return;
+    copyOpts[k] = e.target.checked; updatePreview();
+  });
+  menu.addEventListener("click", async e => {
+    if (!e.target.closest("#copyBtn")) return;
+    const a = findAlbum(menuFor.id), text = copyText(a); if (!text) return;
+    try { await writeClipboard(text); toast("Copied to clipboard"); }
+    catch (err) { toast("Couldn’t copy to the clipboard"); }
+    closeMenu(true);
+  });
+  menu.addEventListener("keydown", e => {
+    if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
+    const items = [...menu.querySelectorAll("a, input, button:not(:disabled)")];
+    const i = items.indexOf(document.activeElement);
+    items[(i + (e.key === "ArrowDown" ? 1 : -1) + items.length) % items.length].focus();
+    e.preventDefault();
+  });
+
+  document.addEventListener("click", e => {
+    if (menuFor && !menu.contains(e.target) && !menuFor.anchor.contains(e.target)) closeMenu(false);
+  });
+  document.addEventListener("keydown", e => { if (e.key === "Escape") closeMenu(true); });
+  addEventListener("resize", () => closeMenu(false));
+  addEventListener("scroll", e => { if (menuFor && !menu.contains(e.target)) closeMenu(false); }, true);
+}
+
+/* ---------- Init ---------- */
+(async function init() {
+  buildControls();
+  bindRowEvents();
+  try {
+    state.albums = await fetchAlbums();
+  } catch (err) {
+    state.albums = [];
+    console.error(err);
+  }
+  render();
+})();
+</script>
+</body>
+</html>
